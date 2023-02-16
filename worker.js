@@ -18,23 +18,48 @@ async function initialRescueService() {
     parentPort.postMessage(`All initial ${process.env.RESCUE_COUNT} rescue services were successfully added.`);
 }
 
-async function startWorker() {
+function generateRandomNumber(id, count, range) {
+  // Calculate the lower and upper bounds of the range for the given id
+  const lowerBound = (id * range) / count;
+  const upperBound = id === count - 1 ? range : ((id + 1) * range) / count;
+
+  // Generate a random number within the range
+  const randomNumber = Math.random() * (upperBound - lowerBound) + lowerBound;
+
+  return randomNumber;
+}
+
+
+async function startWorker(id, count,  range) {
     let active = true;
-    parentPort.postMessage(`Position simulatior started. With ${rescues.length/12000}`);
+    parentPort.postMessage(`Position simulatior #${id+1}/${count} started. In Range ${range}`);
+
+    let floatingMean = 0;
+    let t0 = Date.now();
+    let alpha = 0.99;
+    const speed = 50 / 60 / 60 / 1000; //KM/h to KM/ms
     
   while (active) {
-    //active = false;
-    const randomIndex = Math.floor(Math.random() * rescues.length);
+    const t1 = Date.now();
+    const dt = t1 - t0;
+    // if(dt * range/count < 500) continue;
+    t0 = t1;
+    floatingMean = alpha * floatingMean + (1 - alpha) * dt;
+
+    const estimatedSleepTime = range/count * floatingMean;
+    const moveRange = Math.max(speed * estimatedSleepTime, 0.5e-2);
+
+    const randomIndex = Math.floor(generateRandomNumber(id, count, range));
     const randomRescue = rescues[randomIndex];
     const position = await redis.geopos("rescueservice", randomRescue);
-    const newPos = faker.address.nearbyGPSCoordinate([Number(position[0][1]), Number(position[0][0])], 0.01, true);
+    const newPos = faker.address.nearbyGPSCoordinate([Number(position[0][1]), Number(position[0][0])], moveRange, true);
     await redis.geoadd("rescueservice", newPos[1], newPos[0], randomRescue);
   }
 }
 
 async function main() {
   await initialRescueService();
-  await startWorker();
+  for(let i=0; i < process.env.WORKER_THREADS; i++) startWorker(i, process.env.WORKER_THREADS, process.env.RESCUE_COUNT);
 }
 
 main();
