@@ -30,30 +30,38 @@ function generateRandomNumber(id, count, range) {
 }
 
 
-async function startWorker(id, count,  range) {
-    let active = true;
-    parentPort.postMessage(`Position simulatior #${id+1}/${count} started. In Range ${range}`);
+async function startWorker(id, count, range) {
+  let active = true;
+  parentPort.postMessage(`Position simulatior #${id+1}/${count} started. In Range ${range}`);
 
-    let floatingMean = 0;
-    let t0 = Date.now();
-    let alpha = 0.99;
-    const speed = 50 / 60 / 60 / 1000; //KM/h to KM/ms
-    
+  let floatingMean = 0;
+  let t0 = Date.now();
+  let alpha = 0.99;
+  const speed = 50 / 60 / 60 / 1000; //KM/h to KM/ms
+  const real_movements = process.env.REALISTIC_MOVEMENTS==="true";
+  
   while (active) {
-    const t1 = Date.now();
-    const dt = t1 - t0;
-    // if(dt * range/count < 500) continue;
-    t0 = t1;
-    floatingMean = alpha * floatingMean + (1 - alpha) * dt;
+    let moveRange = 0.8
+    if (real_movements)  {
+      const t1 = Date.now();
+      const dt = t1 - t0;
+      // if(dt * range/count < 500) continue;
+      t0 = t1;
+      floatingMean = alpha * floatingMean + (1 - alpha) * dt;
 
-    const estimatedSleepTime = range/count * floatingMean;
-    const moveRange = Math.max(speed * estimatedSleepTime, 0.5e-2);
+      const estimatedSleepTime = range/count * floatingMean;
+      moveRange = Math.max(speed * estimatedSleepTime, 0.5e-2);
+    }
 
     const randomIndex = Math.floor(generateRandomNumber(id, count, range));
     const randomRescue = rescues[randomIndex];
     const position = await redis.geopos("rescueservice", randomRescue);
+
     const newPos = faker.address.nearbyGPSCoordinate([Number(position[0][1]), Number(position[0][0])], moveRange, true);
-    await redis.geoadd("rescueservice", newPos[1], newPos[0], randomRescue);
+
+    redis.multi()
+      .geoadd("rescueservice", newPos[1], newPos[0], randomRescue)
+      .exec();
   }
 }
 
