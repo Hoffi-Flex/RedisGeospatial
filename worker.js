@@ -71,6 +71,9 @@ async function startWorker(id, count, range) {
     const randomRescue = rescues[randomIndex];
     const position = await redis.geopos("rescueservice", randomRescue);
     redisActions++;
+    if (position.length === 0) {
+      continue;
+    }
     const newPos = faker.address.nearbyGPSCoordinate(
       [Number(position[0][1]), Number(position[0][0])],
       moveRange,
