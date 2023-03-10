@@ -84,10 +84,10 @@ async function startWorker(id, count, range) {
   }
 }
 
-async function main() {
+/*async function main() {
 await initialRescueService();
 for(let i=0; i < process.env.WORKER_THREADS; i++) startWorker(i, process.env.WORKER_THREADS, process.env.RESCUE_COUNT);
-}
+}*/
 
 
 
