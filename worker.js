@@ -1,22 +1,49 @@
 const { parentPort } = require("worker_threads");
 const { faker } = require("@faker-js/faker");
 const { Redis } = require("ioredis");
-const redis = new Redis();
+let redis;
+if (process.env.REDIS_CLUSTER === "true") {
+  redis = new Redis.Cluster(
+    [
+      {
+        port: process.env.REDIS_CLUSTER_PORT_1,
+        host: process.env.REDIS_CLUSTER_HOST_1,
+      },
+      {
+        port: process.env.REDIS_CLUSTER_PORT_2,
+        host: process.env.REDIS_CLUSTER_HOST_2,
+      },
+      {
+        port: process.env.REDIS_CLUSTER_PORT_3,
+        host: process.env.REDIS_CLUSTER_HOST_3,
+      },
+    ],
+    {
+      scaleReads: "slave",
+    }
+  );
+} else {
+  redis = new Redis();
+}
 //parentPort.postMessage(process.env.RESCUE_COUNT);
 let rescues = [];
 let perfIndex = [];
 
 async function initialRescueService() {
-    parentPort.postMessage(`Started initial generation of ${process.env.RESCUE_COUNT} rescue services.`)
-    await redis.del("rescueservice");
-    for (let i = 0; i < process.env.RESCUE_COUNT; i++) {
-        const name = `Rescue Service ${i}`;
-        rescues.push(name);
-        const lat = faker.address.latitude(54.9079, 47.40724, 4);
-        const long = faker.address.longitude(14.98853, 5.98815, 4);
-        await redis.geoadd("rescueservice", long, lat, name);
-    }
-    parentPort.postMessage(`All initial ${process.env.RESCUE_COUNT} rescue services were successfully added.`);
+  parentPort.postMessage(
+    `Started initial generation of ${process.env.RESCUE_COUNT} rescue services.`
+  );
+  await redis.del("rescueservice");
+  for (let i = 0; i < process.env.RESCUE_COUNT; i++) {
+    const name = `Rescue Service ${i}`;
+    rescues.push(name);
+    const lat = faker.address.latitude(54.9079, 47.40724, 4);
+    const long = faker.address.longitude(14.98853, 5.98815, 4);
+    await redis.geoadd("rescueservice", long, lat, name);
+  }
+  parentPort.postMessage(
+    `All initial ${process.env.RESCUE_COUNT} rescue services were successfully added.`
+  );
 }
 
 function generateRandomNumber(id, count, range) {
@@ -30,13 +57,13 @@ function generateRandomNumber(id, count, range) {
   return randomNumber;
 }
 
-
 async function startWorker(id, count, range) {
   let active = true;
-  parentPort.postMessage(
-    `Position simulatior #${id + 1}/${count} started. In Range ${range}`
-  );
-
+  if (process.env.DEBUG === "true") {
+    parentPort.postMessage(
+      `Position simulatior #${id + 1}/${count} started. In Range ${range}`
+    );
+  }
   let floatingMean = 0;
   let t0 = Date.now();
   let alpha = 0.99;
@@ -71,9 +98,7 @@ async function startWorker(id, count, range) {
     const randomRescue = rescues[randomIndex];
     const position = await redis.geopos("rescueservice", randomRescue);
     redisActions++;
-    if (position.length === 0) {
-      continue;
-    }
+    if (position[0] === null) continue;
     const newPos = faker.address.nearbyGPSCoordinate(
       [Number(position[0][1]), Number(position[0][0])],
       moveRange,
@@ -86,26 +111,34 @@ async function startWorker(id, count, range) {
 
 /*async function main() {
 await initialRescueService();
-for(let i=0; i < process.env.WORKER_THREADS; i++) startWorker(i, process.env.WORKER_THREADS, process.env.RESCUE_COUNT);
+for(let i=0; i < process.env.SIMULATON_INSTANCES; i++) startWorker(i, process.env.SIMULATON_INSTANCES, process.env.RESCUE_COUNT);
 }*/
-
-
 
 async function main() {
   await initialRescueService();
-  for(let i=0; i < process.env.WORKER_THREADS; i++) startWorker(i, process.env.WORKER_THREADS, process.env.RESCUE_COUNT);
+  for (let i = 0; i < process.env.SIMULATON_INSTANCES; i++)
+    startWorker(i, process.env.SIMULATON_INSTANCES, process.env.RESCUE_COUNT);
+  parentPort.postMessage("All simulators started.");
   //Performance Monitoring for Debugging
   let timeSeries = [];
   if (process.env.DEBUG === "true") {
     setInterval(() => {
       const mean = perfIndex.reduce((a, b) => a + b, 0) / perfIndex.length;
       timeSeries.push(mean);
-      parentPort.postMessage(`Mean Redis Actions per second: ${Math.floor(mean*process.env.WORKER_THREADS)}`);
+      parentPort.postMessage(
+        `Mean Redis Actions per second: ${Math.floor(
+          mean * process.env.SIMULATON_INSTANCES
+        )}`
+      );
       perfIndex = [];
     }, 1000);
     setInterval(() => {
       const mean = timeSeries.reduce((a, b) => a + b, 0) / timeSeries.length;
-      parentPort.postMessage(`Mean Redis Actions per Minute: ${Math.floor(mean*process.env.WORKER_THREADS)}`);
+      parentPort.postMessage(
+        `Mean Redis Actions per Minute: ${Math.floor(
+          mean * process.env.SIMULATON_INSTANCES
+        )}`
+      );
       timeSeries = [];
     }, 60000);
   }

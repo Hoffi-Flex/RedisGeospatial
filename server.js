@@ -2,29 +2,57 @@ const express = require("express");
 const app = express();
 app.use(express.json());
 const Redis = require("ioredis");
-const redis = new Redis();
+let redis;
+if (process.env.REDIS_CLUSTER === "true") {
+  redis = new Redis.Cluster(
+    [
+      {
+        port: process.env.REDIS_CLUSTER_PORT_1,
+        host: process.env.REDIS_CLUSTER_HOST_1,
+      },
+      {
+        port: process.env.REDIS_CLUSTER_PORT_2,
+        host: process.env.REDIS_CLUSTER_HOST_2,
+      },
+      {
+        port: process.env.REDIS_CLUSTER_PORT_3,
+        host: process.env.REDIS_CLUSTER_HOST_3,
+      },
+    ],
+    {
+      scaleReads: "slave",
+    }
+  );
+} else {
+  redis = new Redis();
+}
 //.ENV
-require('dotenv').config();
+require("dotenv").config();
 
-const { Worker } = require('worker_threads');
+const { Worker } = require("worker_threads");
 
 //Worker Thread magic
-const worker = new Worker('./worker.js');
+const worker = new Worker("./worker.js");
 
-worker.on('message', message => {
-  console.log('Worker message:', message);
+worker.on("message", (message) => {
+  console.log("Worker message:", message);
 });
 
-worker.on('error', error => {
-  console.error('Worker error:', error);
+worker.on("error", (error) => {
+  console.error("Worker error:", error);
 });
 
-worker.on('exit', code => {
-  console.log('Worker exit:', code);
+worker.on("exit", (code) => {
+  console.log("Worker exit:", code);
 });
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");
+  console.log(
+    process.env.REDIS_CLUSTER === "true"
+      ? "Starting using Redis Cluster"
+      : "Starting using Redis Standalone Instance"
+  );
 });
 
 app.post("/rescueservice", async (req, res) => {
@@ -59,17 +87,24 @@ app.get("/rescueservice/:lat/:long/:radius", async (req, res) => {
       if (err) {
         res.status(500).send({ error: "Ein Fehler ist aufgetreten!" });
       } else {
-        res.status(200).send({ locations: reply.map((item) => { return { name: item[0], distance: item[1], position: item[2].reverse() }}) });
+        res.status(200).send({
+          locations: reply.map((item) => {
+            return {
+              name: item[0],
+              distance: item[1],
+              position: item[2].reverse(),
+            };
+          }),
+        });
       }
     }
   );
 });
 
 app.delete("/rescueservice", async (req, res) => {
-    await redis.del("rescueservice");
-    res.status(200).send({ message: "Erfolgreich gelöscht!" });
-    }
-);
+  await redis.del("rescueservice");
+  res.status(200).send({ message: "Erfolgreich gelöscht!" });
+});
 
 app.delete("/rescueservice/:name", async (req, res) => {
   const { name } = req.params;
