@@ -24,7 +24,7 @@ if (process.env.REDIS_CLUSTER === "true") {
     }
   );
 } else {
-  redis = new Redis();
+  redis = new Redis(process.env.REDIS_PORT, process.env.REDIS_HOST);
 }
 //.ENV
 require("dotenv").config();
@@ -32,19 +32,21 @@ require("dotenv").config();
 const { Worker } = require("worker_threads");
 
 //Worker Thread magic
-const worker = new Worker("./worker.js");
+if (process.env.SIM_ENABLED === "true") {
+  const worker = new Worker("./worker.js");
 
-worker.on("message", (message) => {
-  console.log("Worker message:", message);
-});
+  worker.on("message", (message) => {
+    console.log("Worker message:", message);
+  });
 
-worker.on("error", (error) => {
-  console.error("Worker error:", error);
-});
+  worker.on("error", (error) => {
+    console.error("Worker error:", error);
+  });
 
-worker.on("exit", (code) => {
-  console.log("Worker exit:", code);
-});
+  worker.on("exit", (code) => {
+    console.log("Worker exit:", code);
+  });
+}
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");

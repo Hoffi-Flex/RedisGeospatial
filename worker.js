@@ -23,7 +23,7 @@ if (process.env.REDIS_CLUSTER === "true") {
     }
   );
 } else {
-  redis = new Redis();
+  redis = new Redis(process.env.REDIS_PORT, process.env.REDIS_HOST);
 }
 //parentPort.postMessage(process.env.RESCUE_COUNT);
 let rescues = [];
@@ -47,17 +47,15 @@ async function initialRescueService() {
 }
 
 function generateRandomNumber(id, count, range) {
-  // Calculate the lower and upper bounds of the range for the given id
   const lowerBound = (id * range) / count;
   const upperBound = id === count - 1 ? range : ((id + 1) * range) / count;
 
-  // Generate a random number within the range
   const randomNumber = Math.random() * (upperBound - lowerBound) + lowerBound;
 
   return randomNumber;
 }
 
-async function startWorker(id, count, range) {
+async function startSimulator(id, count, range) {
   let active = true;
   if (process.env.DEBUG === "true") {
     parentPort.postMessage(
@@ -109,15 +107,10 @@ async function startWorker(id, count, range) {
   }
 }
 
-/*async function main() {
-await initialRescueService();
-for(let i=0; i < process.env.SIMULATON_INSTANCES; i++) startWorker(i, process.env.SIMULATON_INSTANCES, process.env.RESCUE_COUNT);
-}*/
-
 async function main() {
   await initialRescueService();
   for (let i = 0; i < process.env.SIMULATON_INSTANCES; i++)
-    startWorker(i, process.env.SIMULATON_INSTANCES, process.env.RESCUE_COUNT);
+    startSimulator(i, process.env.SIMULATON_INSTANCES, process.env.RESCUE_COUNT);
   parentPort.postMessage("All simulators started.");
   //Performance Monitoring for Debugging
   let timeSeries = [];
