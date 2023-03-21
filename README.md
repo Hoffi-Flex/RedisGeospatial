@@ -92,6 +92,7 @@ To run this project, you can perform the following changes to your .env file.
 ```http
   POST /rescueservice
 ```
+###  Body
 ```json
 {
     "name":"RTW 1",
